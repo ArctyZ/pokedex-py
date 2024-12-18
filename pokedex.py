@@ -1,6 +1,6 @@
 import sys
 import requests
-from PyQt5.QtWidgets import QApplication,QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QGridLayout
+from PyQt5.QtWidgets import QApplication,QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QGridLayout,QGroupBox
 from PyQt5.QtCore import Qt, QSize
 from PyQt5.QtGui import QFont, QFontDatabase, QPixmap, QImage
 
@@ -11,31 +11,28 @@ class Pokedex(QWidget):
         self.title_label = QLabel("Pokédex", self)
         self.pokemon_input = QLineEdit(self)
         self.search_button = QPushButton("Search",self)
-        self.order_label = QLabel(f"Order:", self)
-        self.pokemon_order_label = QLabel("Pokemon's order", self)
+        self.order_label = QLabel(self)
         self.name_label = QLabel("Name:", self)
-        self.pokemon_name_label = QLabel("Pokemon's name", self)
+        self.pokemon_name_label = QLabel(self)
         self.form_label = QLabel("Form:", self)
-        self.pokemon_form_label = QLabel("Pokemon's form", self)
+        self.pokemon_form_label = QLabel(self)
         self.type_label = QLabel("Type:", self)
-        self.pokemon_type_label = QLabel("Pokemon's type", self)
+        self.pokemon_type_label = QLabel(self)
         self.height_label = QLabel("Height:", self)
-        self.pokemon_height_label = QLabel("pokemon's height", self)
+        self.pokemon_height_label = QLabel(self)
         self.weight_label = QLabel("Weight:", self)
-        self.pokemon_weight_label = QLabel("pokemon's Weight", self)
-        self.pokemon_description_label = QLabel("pokemon's Description", self)
-        self.sound_button = QPushButton("Sounds", self)
+        self.pokemon_weight_label = QLabel(self)
+        self.pokemon_description_label = QLabel(self)
+        self.sound_button = QPushButton("Sounds 🔊", self)
         self.image_sprite = QLabel(self)
         self.footer_label = QLabel(self)
 
         # test image
-        image_data = QImage()
-        image_data.loadFromData(requests.get('https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/official-artwork/132.png').content)
-        self.image_sprite.setPixmap(QPixmap(image_data).scaled(QSize(250,250)))
-        self.image_sprite.setScaledContents(True)
+        self.image_data = QImage()
+        
 
         # setting hyperlink
-        template = "<span>{0}<a href={1}>{2}</a></span>"
+        template = "<hr><br><span>{0}<a href={1}>{2}</a></span>"
         self.footer_label.setText(template.format("Visit my ", "https://github.com/ArctyZ", "Github"))
         self.footer_label.setOpenExternalLinks(True)
 
@@ -57,7 +54,6 @@ class Pokedex(QWidget):
 
         stat_box = QGridLayout()
         stat_box.addWidget(self.order_label, 0, 0)
-        stat_box.addWidget(self.pokemon_order_label, 0, 1)
         stat_box.addWidget(self.name_label, 1, 0)
         stat_box.addWidget(self.pokemon_name_label, 1, 1)
         stat_box.addWidget(self.form_label, 2,0)
@@ -93,9 +89,21 @@ class Pokedex(QWidget):
         # styling
 
         self.title_label.setObjectName("title_label")
+        self.setObjectName("body")
         self.image_sprite.setObjectName("image_sprite")
+        stat_box.setObjectName("stat_box")
         self.footer_label.setObjectName("footer_label")
         self.setStyleSheet("""
+            #body{
+                background-color: hsl(149, 98%, 50%);
+                
+                
+            }
+
+            #stat_box{
+                background-color: red;
+            }               
+            
             QLabel#title_label{
                 font-size: 50px;
                 font-weight: bold;
@@ -109,17 +117,42 @@ class Pokedex(QWidget):
             
             QLabel#footer_label{
                 font-size: 15px;
+                padding:10px;
             }
 
 
         """)
-
-
+        
+        self.search_button.clicked.connect(self.search_click)
+        
     def search_click(self):
-        pass
+        
+
+        try:
+            pokemon_name = self.pokemon_input.text()
+            url = f"https://pokeapi.co/api/v2/pokemon/{pokemon_name}"
+            res = requests.get(url)
+            res.raise_for_status()
+            data = res.json()
+            if data["name"] == pokemon_name:
+                self.display_data(data)
+
+        except:
+            pass
 
     def display_data(self, data):
-        pass
+        self.order_label.setText(f"#{data["order"]}")
+        self.pokemon_name_label.setText(data["name"])
+        self.pokemon_type_label.setText(data["types"][0]["type"]["name"])
+        self.pokemon_height_label.setText(f"{data["height"] / 10}m")
+        self.pokemon_weight_label.setText(f"{data["weight"]}kg")
+        self.display_image(data["sprites"]["front_default"])
+
+    
+    def display_image(self, url):
+        self.image_data.loadFromData(requests.get(f"{url}").content)
+        self.image_sprite.setPixmap(QPixmap(self.image_data).scaled(QSize(250,250)))
+        self.image_sprite.setScaledContents(True)
 
     def play_sound(self):
         pass

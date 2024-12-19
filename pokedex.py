@@ -1,8 +1,13 @@
 import sys
+import os
 import requests
+import time
 from PyQt5.QtWidgets import QApplication,QLabel, QLineEdit, QPushButton, QVBoxLayout, QHBoxLayout, QWidget, QGridLayout,QGroupBox
-from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QFont, QFontDatabase, QPixmap, QImage
+from PyQt5.QtCore import Qt, QSize, QUrl
+from PyQt5.QtGui import QFont, QFontDatabase, QPixmap, QImage, QIcon
+from PyQt5.QtMultimedia import QMediaPlayer, QMediaContent
+import pygame
+import tempfile
 
 
 class Pokedex(QWidget):
@@ -14,8 +19,6 @@ class Pokedex(QWidget):
         self.order_label = QLabel(self)
         self.name_label = QLabel("Name:", self)
         self.pokemon_name_label = QLabel(self)
-        self.form_label = QLabel("Form:", self)
-        self.pokemon_form_label = QLabel(self)
         self.type_label = QLabel("Type:", self)
         self.pokemon_type_label = QLabel(self)
         self.height_label = QLabel("Height:", self)
@@ -27,13 +30,16 @@ class Pokedex(QWidget):
         self.image_sprite = QLabel(self)
         self.footer_label = QLabel(self)
 
-        # test image
+        #image
         self.image_data = QImage()
-        
+
+        #sound
+        # self.media_sound = QMediaPlayer(None, QMediaPlayer.LowLatency)
+        pygame.mixer.init()
 
         # setting hyperlink
-        template = "<hr><br><span>{0}<a href={1}>{2}</a></span>"
-        self.footer_label.setText(template.format("Visit my ", "https://github.com/ArctyZ", "Github"))
+        template = "<hr><br><span><a href={0}>{1}</a></span>"
+        self.footer_label.setText(template.format("https://github.com/ArctyZ", "Github"))
         self.footer_label.setOpenExternalLinks(True)
 
 
@@ -41,6 +47,7 @@ class Pokedex(QWidget):
 
     def initUI(self):
         self.setWindowTitle("Pokedex")
+        self.setWindowIcon(QIcon("images/pokeball.png"))
 
         # Layout
         vbox = QVBoxLayout()
@@ -56,15 +63,13 @@ class Pokedex(QWidget):
         stat_box.addWidget(self.order_label, 0, 0)
         stat_box.addWidget(self.name_label, 1, 0)
         stat_box.addWidget(self.pokemon_name_label, 1, 1)
-        stat_box.addWidget(self.form_label, 2,0)
-        stat_box.addWidget(self.pokemon_form_label, 2,1)
-        stat_box.addWidget(self.type_label, 3,0)
-        stat_box.addWidget(self.pokemon_type_label, 3,1)
-        stat_box.addWidget(self.height_label, 4,0)
-        stat_box.addWidget(self.pokemon_height_label, 4,1)
-        stat_box.addWidget(self.weight_label, 5,0)
-        stat_box.addWidget(self.pokemon_weight_label, 5,1)
-        stat_box.addWidget(self.pokemon_description_label, 6,0,0,2)
+        stat_box.addWidget(self.type_label, 2,0)
+        stat_box.addWidget(self.pokemon_type_label, 2,1)
+        stat_box.addWidget(self.height_label, 3,0)
+        stat_box.addWidget(self.pokemon_height_label, 3,1)
+        stat_box.addWidget(self.weight_label, 4,0)
+        stat_box.addWidget(self.pokemon_weight_label, 4,1)
+        stat_box.addWidget(self.pokemon_description_label, 5,0)
 
         mid_section_box = QHBoxLayout()
         mid_section_box.addLayout(stat_box)
@@ -124,25 +129,52 @@ class Pokedex(QWidget):
         """)
         
         self.search_button.clicked.connect(self.search_click)
+        self.sound_button.clicked.connect(self.play_sound)
         
     def search_click(self):
-        
-
         try:
-            pokemon_name = self.pokemon_input.text()
+            pokemon_name = self.pokemon_input.text().lower().replace(" ", "-")
             url = f"https://pokeapi.co/api/v2/pokemon/{pokemon_name}"
             res = requests.get(url)
             res.raise_for_status()
-            data = res.json()
-            if data["name"] == pokemon_name:
-                self.display_data(data)
+            self.data = res.json()
+            self.sound_url = self.data["cries"]["latest"]
+            if self.data["name"] == pokemon_name:
+                self.display_data(self.data)
 
-        except:
-            pass
+        except requests.exceptions.HTTPError as http_error:
+            match res.status_code:
+                case 400:
+                    self.display_error("Bad Resquest\n Please Check your input.")
+                case 401:
+                    self.display_error("Unauthorized\n Invalid API key.")
+                case 403:
+                    self.display_error("Forbidden\n Access is denied.")
+                case 404:
+                    self.display_error("Pokemon not found.")
+                case 500:
+                    self.display_error("Internal server error\n Please try again later.")
+                case 502:
+                    self.display_error("Bad gateway\n Invalid response from the server.")
+                case 503:
+                    self.display_error("Service Unavailable\n Server is down.")
+                case 504:
+                    self.display_error("Gateway timeout\n No response from the server.")
+                case _:
+                    self.display_error(f"HTTP error occured\n {http_error}")
+        except requests.exceptions.ConnectionError:
+            self.display_error("Connection Error\nCheck your internet connection.")
+        except requests.exceptions.Timeout:
+            self.display_error("Timeout error\nThe request timed out")
+        except requests.exceptions.TooManyRedirects:
+            self.display_error("Too many redirects\nCheck the URL")
+        except requests.exceptions.RequestException as request_error:
+            self.display_error(f"Reques error\n{request_error}")
 
     def display_data(self, data):
+        self.pokemon_description_label.setText("")
         self.order_label.setText(f"#{data["order"]}")
-        self.pokemon_name_label.setText(data["name"])
+        self.pokemon_name_label.setText(f"{data["name"]}".capitalize())
         self.pokemon_type_label.setText(data["types"][0]["type"]["name"])
         self.pokemon_height_label.setText(f"{data["height"] / 10}m")
         self.pokemon_weight_label.setText(f"{data["weight"]}kg")
@@ -155,11 +187,38 @@ class Pokedex(QWidget):
         self.image_sprite.setScaledContents(True)
 
     def play_sound(self):
-        pass
+        try:
+            res = requests.get(self.sound_url)
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".ogg") as temp_sound:
+                temp_sound.write(res.content)
+                temp_audio_path = temp_sound.name
+        
+            pygame.mixer.music.load(temp_audio_path)
+            pygame.mixer.music.play()
+
+            while pygame.mixer.music.get_busy():
+                pygame.time.Clock().tick(10)
+
+            pygame.mixer.music.stop()
+            print("Music done playing.")
+        finally:
+            if temp_audio_path and os.path.exists(temp_audio_path):
+                try:
+                    os.remove(temp_audio_path)
+                    print("Temporary audio file deleted.")
+                except Exception as e:
+                    print(f"Error deleting temporary file: {e}")
+    
+        
 
     def display_error(self, message):
-        pass
-
+        self.pokemon_description_label.setText(message)
+        self.order_label.setText("")
+        self.pokemon_name_label.setText("")
+        self.pokemon_type_label.setText("")
+        self.pokemon_height_label.setText("")
+        self.pokemon_weight_label.setText("")
+        self.image_sprite.clear()
 
 
 
